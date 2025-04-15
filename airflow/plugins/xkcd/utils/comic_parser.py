@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 import logging
 from dataclasses import dataclass
-from ..config import DEFAULT_SCHEMA, DEFAULT_TABLE, DEFAULT_LOG_LEVEL
+from xkcd.config import DEFAULT_SCHEMA, DEFAULT_TABLE, DEFAULT_LOG_LEVEL
 
 logger = logging.getLogger(__name__)
 logger.setLevel(DEFAULT_LOG_LEVEL)

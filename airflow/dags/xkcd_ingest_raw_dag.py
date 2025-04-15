@@ -7,10 +7,10 @@ from airflow.operators.empty import EmptyOperator
 from airflow.utils.state import State
 from airflow.exceptions import AirflowSkipException
 
-from airflow.plugins.xkcd.hooks.xkcd_api_hook import XKCDApiHook
-from airflow.plugins.xkcd.hooks.xkcd_postgres_hook import XKCDPostgresHook
-from airflow.plugins.xkcd.utils.comic_parser import ComicParser, ComicData
-from airflow.plugins.xkcd.config import (
+from xkcd.hooks.xkcd_api_hook import XKCDApiHook
+from xkcd.hooks.xkcd_postgres_hook import XKCDPostgresHook
+from xkcd.utils.comic_parser import ComicParser, ComicData
+from xkcd.config import (
     TASK_RETRY_DELAY,
     MAX_ACTIVE_RUNS,
     POLLING_INTERVAL_MINUTES,
@@ -47,7 +47,7 @@ def xkcd_incremental_dag():
         retry_delay=timedelta(minutes=POLLING_INTERVAL_MINUTES),
         retry_exponential_backoff=False,
     )
-    def get_comic_numbers_to_process() -> Dict[str, List[int]]:
+    def get_comic_numbers_to_process() -> List[int]:
         """
         Get all comic numbers
 
@@ -70,7 +70,7 @@ def xkcd_incremental_dag():
 
             new_comics = list(range(latest_db_num + 1, latest_api_num + 1))
             logger.info(f"Found {len(new_comics)} new comics to fetch")
-            return {'comics_to_fetch': new_comics}
+            return new_comics
 
         except Exception as e:
             if not isinstance(e, AirflowSkipException):
@@ -113,17 +113,12 @@ def xkcd_incremental_dag():
             raise
 
     @task(trigger_rule=TriggerRule.ALL_DONE)
-    def summarize_results(results: List[bool]) -> None:
-        """Summarize processing results"""
-        if not results:
-            logger.info("No comics were processed in this run")
-            return
-
-        success_count = sum(1 for r in results if r)
-        total_count = len(results)
+    def summarize_results() -> None:
+        """Simple summary of ingestion results"""
+        pg_hook = XKCDPostgresHook()
+        max_num = pg_hook.get_max_comic_num()
         logger.info(
-            f"Processing completed. "
-            f"Successfully processed {success_count} out of {total_count} comics"
+            f"Ingestion completed. Latest comic in database: #{max_num}"
         )
 
     # Create start and end markers
@@ -134,17 +129,13 @@ def xkcd_incremental_dag():
     )
 
     # Build task flow
-    comic_num_list = get_comic_numbers_to_process()
-    # Only execute these tasks if get_comic_numbers_to_process succeeds
-    comic_data_list = fetch_comic.expand(
-        comic_num=comic_num_list['comics_to_fetch']
-    )
+    comic_nums = get_comic_numbers_to_process()
+    comic_data_list = fetch_comic.expand(comic_num=comic_nums)
     load_results = load_comic.expand(comic_data=comic_data_list)
+    summary = summarize_results()
 
     # Define task dependencies
-    start >> comic_num_list
-    comic_num_list >> comic_data_list >> load_results >> summarize_results() >> end
-
+    start >> comic_nums >> comic_data_list >> load_results >> summary >> end
 
 # Create DAG instance
 dag = xkcd_incremental_dag()

@@ -2,14 +2,14 @@ from typing import List, Dict, Any, Optional
 import logging
 from contextlib import contextmanager
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from ..config import (
+from xkcd.config import (
     DEFAULT_POSTGRES_CONN_ID,
     DEFAULT_SCHEMA,
     DEFAULT_TABLE,
     DEFAULT_BATCH_SIZE,
     DEFAULT_LOG_LEVEL
 )
-from ..utils.comic_parser import ComicData, ComicParser
+from xkcd.utils.comic_parser import ComicData, ComicParser
 
 logger = logging.getLogger(__name__)
 logger.setLevel(DEFAULT_LOG_LEVEL)
@@ -23,7 +23,7 @@ class XKCDPostgresHook(PostgresHook):
     def __init__(
             self,
             postgres_conn_id: str = DEFAULT_POSTGRES_CONN_ID,
-            schema: str = DEFAULT_SCHEMA,
+            db_schema: str = DEFAULT_SCHEMA,
             table: str = DEFAULT_TABLE
     ) -> None:
         """
@@ -31,11 +31,11 @@ class XKCDPostgresHook(PostgresHook):
 
         Args:
             postgres_conn_id: Airflow connection ID for Postgres
-            schema: Database schema name
+            db_schema: Database schema name
             table: Table name
         """
         super().__init__(postgres_conn_id=postgres_conn_id)
-        self.schema = schema
+        self.db_schema = db_schema
         self.table = table
         self.parser = ComicParser()
 
@@ -68,7 +68,7 @@ class XKCDPostgresHook(PostgresHook):
         """
         query = f"""
             SELECT COALESCE(MAX(num), 0)
-            FROM {self.schema}.{self.table}
+            FROM {self.db_schema}.{self.table}
         """
 
         try:
@@ -80,45 +80,6 @@ class XKCDPostgresHook(PostgresHook):
                 return max_num
         except Exception as e:
             logger.error(f"Failed to get max comic number: {str(e)}")
-            raise
-
-
-    # TODO: delete bulk_insert_comics()
-    def bulk_insert_comics(self, comics_data: List[ComicData], batch_size: int = DEFAULT_BATCH_SIZE) -> None:
-        """
-        Insert multiple comics into database using batch processing
-
-        Args:
-            comics_data: List of ComicData objects to insert
-            batch_size: Number of records to insert in each batch
-        """
-        if not comics_data:
-            logger.warning("No comics data provided for insertion")
-            return
-
-        insert_query = self.parser.generate_insert_query()
-
-        try:
-            with self.get_cursor() as cursor:
-                # Process in batches
-                for i in range(0, len(comics_data), batch_size):
-                    batch = comics_data[i:i + batch_size]
-                    values = [
-                        tuple(self.parser.to_db_record(comic).values())
-                        for comic in batch
-                    ]
-
-                    cursor.executemany(insert_query, values)
-
-                    logger.info(
-                        f"Inserted batch of {len(batch)} comics "
-                        f"(comics {batch[0].num} to {batch[-1].num})"
-                    )
-
-            logger.info(f"Successfully inserted {len(comics_data)} comics in total")
-
-        except Exception as e:
-            logger.error(f"Failed to insert comics: {str(e)}")
             raise
 
     def insert_single_comic(self, comic_data: ComicData) -> bool:
@@ -141,3 +102,5 @@ class XKCDPostgresHook(PostgresHook):
         except Exception as e:
             logger.error(f"Failed to insert comic #{comic_data.num}: {str(e)}")
             return False
+
+# todo: Add batch insert method

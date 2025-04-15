@@ -5,7 +5,7 @@ from airflow.hooks.base import BaseHook
 from tenacity import retry, stop_after_attempt, wait_exponential
 import logging
 
-from ..config import (
+from xkcd.config import (
     XKCD_BASE_URL,
     XKCD_INFO_ENDPOINT,
     DEFAULT_RATE_LIMIT_DELAY,

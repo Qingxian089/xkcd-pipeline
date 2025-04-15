@@ -5,10 +5,10 @@ from airflow.decorators import dag, task
 from airflow.utils.trigger_rule import TriggerRule
 from airflow.operators.empty import EmptyOperator
 
-from airflow.plugins.xkcd.hooks.xkcd_api_hook import XKCDApiHook
-from airflow.plugins.xkcd.hooks.xkcd_postgres_hook import XKCDPostgresHook
-from airflow.plugins.xkcd.utils.comic_parser import ComicParser, ComicData
-from airflow.plugins.xkcd.config import (
+from xkcd.hooks.xkcd_api_hook import XKCDApiHook
+from xkcd.hooks.xkcd_postgres_hook import XKCDPostgresHook
+from xkcd.utils.comic_parser import ComicParser, ComicData
+from xkcd.config import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_LOG_LEVEL
 )
@@ -31,14 +31,14 @@ default_args = {
     default_args=default_args,
     description='Backfill historical XKCD comics',
     schedule_interval=None,  # Manual trigger only
-    start_date=datetime(2025, 1, 14),
+    start_date=datetime(2025, 4, 14),
     catchup=False,
     max_active_runs=1,  # Ensure only one backfill runs at a time
     tags=['xkcd', 'backfill'],
 )
 def xkcd_backfill_dag():
     @task
-    def get_comic_numbers_to_process() -> Dict[str, List[List[int]]]:
+    def get_comic_numbers_to_process() -> List[List[int]]:
         """
         Get all missing comic numbers and split them into batches
 
@@ -61,7 +61,7 @@ def xkcd_backfill_dag():
                 for i in range(0, len(comics_to_process), DEFAULT_BATCH_SIZE)
             ]
             logger.info(f"Found {len(comics_to_process)} comics to process in {len(batches)} batches")
-            return {'batches': batches}
+            return batches
 
         except Exception as e:
             logger.error(f"Failed to get comic numbers: {str(e)}")
@@ -104,25 +104,16 @@ def xkcd_backfill_dag():
             except Exception as e:
                 logger.error(f"Error processing comic #{comic_num}: {str(e)}")
                 results.append(False)
-
+        logger.info(f"Batch {batch[0]} - {batch[-1]} processed with {sum(results)} successes")
         return results
 
     @task(trigger_rule=TriggerRule.ALL_DONE)
-    def summarize_batch_results(batch_results: List[List[bool]]) -> None:
-        """
-        Summarize results of all batches
-
-        Args:
-            batch_results: List of results from each batch
-        """
-        total_comics = sum(len(batch) for batch in batch_results)
-        total_success = sum(sum(1 for result in batch if result) for batch in batch_results)
-
+    def summarize_results() -> None:
+        """Simple summary of ingestion results"""
+        pg_hook = XKCDPostgresHook()
+        max_num = pg_hook.get_max_comic_num()
         logger.info(
-            f"Backfill completed.\n"
-            f"Successfully processed: {total_success} comics\n"
-            f"Failed: {total_comics - total_success} comics\n"
-            f"Total batches: {len(batch_results)}"
+            f"Ingestion completed. Latest comic in database: #{max_num}"
         )
 
     # Create start and end markers
@@ -134,17 +125,15 @@ def xkcd_backfill_dag():
 
     # Build task flow
     batches = get_comic_numbers_to_process()
-
     # Process each batch
-    batch_results = process_batch.expand(
-        batch=batches['batches']
-    )
+    batch_results = process_batch.expand(batch=batches)
+
+    # Create single summary task
+    summary = summarize_results()
 
     # Define task dependencies
     start >> batches
-    batches >> batch_results
-    batch_results >> summarize_batch_results() >> end
-
+    batches >> batch_results >> summary >> end
 
 # Create DAG instance
 dag = xkcd_backfill_dag()
