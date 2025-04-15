@@ -8,6 +8,6 @@ CREATE TABLE IF NOT EXISTS xkcd.raw_xkcd_comics (
     img_url TEXT,                      -- Direct image URL
     published_date DATE,               -- Date of publication (YYYY-MM-DD)
     transcript TEXT,                   -- Comic transcript text
-    fetched_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,  -- Data collection timestamp
     raw_data JSONB                     -- Raw JSON response from API
+    loaded_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,  -- Timestamp of when the data was loaded
 );

@@ -14,7 +14,6 @@ x-airflow-common: &airflow-common
     - ./airflow/plugins:/opt/airflow/plugins
     - ./airflow/logs:/opt/airflow/logs
     - ./dbt:/opt/airflow/dbt
-    - ./scripts:/opt/airflow/scripts
   user: "${AIRFLOW_UID}:0"
   networks:
     - airflow-network
