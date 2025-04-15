@@ -1,0 +1,133 @@
+version: 2
+
+models:
+  - name: stg_xkcd_comics
+    description: Standardized staging layer for XKCD comics data
+    columns:
+      - name: comic_id
+        description: Unique identifier for each comic
+        tests:
+          - unique
+          - not_null
+      - name: title
+        description: Title of the comic
+        tests:
+          - not_null
+      - name: alt_text
+        description: Alternative text shown when hovering over the comic
+      - name: img_url
+        description: URL of the comic image
+      - name: published_date
+        description: Publication date of the comic
+        tests:
+          - not_null
+      - name: transcript
+        description: Text transcript of the comic
+      - name: loaded_at
+        description: Timestamp when the record was initially loaded
+      - name: dbt_updated_at
+        description: Timestamp when the record was last updated by dbt
+
+  - name: dim_comics
+    description: Dimension table containing comic attributes and metadata
+    columns:
+      - name: comic_id
+        description: Primary key - Unique identifier for each comic
+        tests:
+          - unique
+          - not_null
+      - name: title
+        description: Title of the comic
+        tests:
+          - not_null
+      - name: title_length
+        description: Number of characters in the title, used for cost calculation
+        tests:
+          - not_null
+      - name: alt_text
+        description: Alternative text shown when hovering over the comic
+      - name: img_url
+        description: URL of the comic image
+      - name: published_date
+        description: Publication date of the comic
+        tests:
+          - not_null
+      - name: transcript
+        description: Text transcript of the comic
+      - name: loaded_at
+        description: Timestamp when the record was initially loaded
+      - name: dbt_updated_at
+        description: Timestamp when the record was last updated by dbt
+
+  - name: fct_comic_metrics
+    description: Fact table containing business metrics for each comic
+    columns:
+      - name: comic_id
+        description: Foreign key to dim_comics
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('dim_comics')
+              field: comic_id
+      - name: title_cost_euros
+        description: Cost of the comic title (5 euros per letter)
+        tests:
+          - not_null
+      - name: estimated_views
+        description: Estimated number of views (random * 10000)
+        tests:
+          - not_null
+      - name: customer_rating
+        description: Customer rating between 1.0 and 10.0
+        tests:
+          - not_null
+          - accepted_values:
+              values: [ 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
+                        2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9,
+                        3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9,
+                        4.0, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9,
+                        5.0, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9,
+                        6.0, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9,
+                        7.0, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9,
+                        8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9,
+                        9.0, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9,
+                        10.0 ]
+      - name: dbt_updated_at
+        description: Timestamp when the record was last updated by dbt
+
+  - name: monthly_comic_metrics
+    description: Monthly aggregated fact table containing metrics for business reporting
+    columns:
+      - name: month
+        description: Month of publication
+        tests:
+          - not_null
+          - unique
+      - name: comics_count
+        description: Number of comics published in the month
+        tests:
+          - not_null
+      - name: total_cost_euros
+        description: Total cost of comics published in the month
+        tests:
+          - not_null
+      - name: avg_views
+        description: Average number of views per comic in the month
+        tests:
+          - not_null
+      - name: avg_rating
+        description: Average customer rating for comics in the month
+        tests:
+          - not_null
+          - accepted_values:
+              values: [ 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
+                        2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9,
+                        3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9,
+                        4.0, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9,
+                        5.0, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9,
+                        6.0, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9,
+                        7.0, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9,
+                        8.0, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8, 8.9,
+                        9.0, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9,
+                        10.0 ]

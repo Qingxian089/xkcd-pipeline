@@ -1,0 +1,38 @@
+version: 2
+
+sources:
+  - name: xkcd
+    database: xkcd_db
+    schema: xkcd
+    description: Raw data loaded from XKCD API
+    tables:
+      - name: raw_xkcd_comics
+        description: Raw data loaded from XKCD API
+        loaded_at_field: loaded_at
+        columns:
+          - name: num
+            description: Unique identifier for each comic
+            tests:
+              - unique
+              - not_null
+          - name: title
+            description: Title of the comic
+            tests:
+              - not_null
+          - name: alt_text
+            description: Alternative text shown when hovering over the comic
+          - name: img_url
+            description: URL of the comic image
+          - name: published_date
+            description: Publication date of the comic
+            tests:
+              - not_null
+          - name: transcript
+            description: Text transcript of the comic
+          - name: raw_data
+            description: Raw JSON response from the API
+          - name: loaded_at
+            description: Timestamp when the record was loaded
+        freshness:
+          warn_after: { count: 24, period: hour }
+          error_after: { count: 48, period: hour }

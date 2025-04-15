@@ -1,0 +1,27 @@
+# for docker
+xkcd_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: xkcd-db
+      user: xkcd_user
+      password: xkcd_pass
+      port: 5432
+      dbname: xkcd_db
+      schema: analytics
+      threads: 4
+
+## for local development
+#xkcd_analytics:
+#  target: dev
+#  outputs:
+#    dev:
+#      type: postgres
+#      host: localhost
+#      user: xkcd_user
+#      password: xkcd_pass
+#      port: 5433
+#      dbname: xkcd_db
+#      schema: analytics
+#      threads: 4
