@@ -7,7 +7,7 @@
 
 WITH monthly_metrics AS (
     SELECT
-        DATE_TRUNC('month', d.published_date) as month,
+        DATE_TRUNC('month', d.published_date) as year_month,
         COUNT(DISTINCT d.comic_id) as comics_count,
         SUM(f.title_cost_euros) as total_cost_euros,
         AVG(f.estimated_views) as avg_views,

@@ -96,11 +96,11 @@ models:
       - name: dbt_updated_at
         description: Timestamp when the record was last updated by dbt
 
-  - name: monthly_comic_metrics
+  - name: fct_monthly_metrics
     description: Monthly aggregated fact table containing metrics for business reporting
     columns:
-      - name: month
-        description: Month of publication
+      - name: year_month
+        description: Year and month of publication
         tests:
           - not_null
           - unique
