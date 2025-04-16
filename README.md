@@ -145,7 +145,7 @@ The pipeline includes comprehensive data quality checks:
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/xkcd-data-pipeline.git
+   git clone https://github.com/Qingxian089/xkcd-pipeline.git
    cd xkcd-data-pipeline
    ```
 
