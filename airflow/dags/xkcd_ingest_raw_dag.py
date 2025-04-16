@@ -3,8 +3,8 @@ from typing import List, Optional, Dict
 import logging
 from airflow.decorators import dag, task
 from airflow.utils.trigger_rule import TriggerRule
+from airflow.api.common.trigger_dag import trigger_dag
 from airflow.operators.empty import EmptyOperator
-from airflow.utils.state import State
 from airflow.exceptions import AirflowSkipException
 
 from xkcd.hooks.xkcd_api_hook import XKCDApiHook
@@ -36,10 +36,10 @@ default_args = {
     dag_id='xkcd_incremental_update',
     default_args=default_args,
     description='Incrementally fetch and load new XKCD comics',
-    schedule_interval='0 8 * * 1,3,5',  # Run at 8 AM on Monday, Wednesday, Friday
+    schedule_interval='0 10 * * 1,3,5',  # Run at 8 AM on Monday, Wednesday, Friday
     catchup=False,
     max_active_runs=MAX_ACTIVE_RUNS,
-    tags=['xkcd', 'incremental'],
+    tags=['xkcd', 'incremental', 'ingestion'],
 )
 def xkcd_incremental_dag():
     @task(
@@ -128,6 +128,15 @@ def xkcd_incremental_dag():
         trigger_rule=TriggerRule.ALL_DONE  # Ensure this runs regardless of upstream states
     )
 
+    @task(trigger_rule=TriggerRule.ALL_SUCCESS)
+    def trigger_dbt_transformation() -> None:
+        # Trigger DBT DAG
+        logger.info("Triggering DBT transformation DAG")
+        trigger_dag(
+            dag_id='dbt_models_run_and_test',
+            run_id=None
+        )
+
     # Build task flow
     comic_nums = get_comic_numbers_to_process()
     comic_data_list = fetch_comic.expand(comic_num=comic_nums)
@@ -136,6 +145,7 @@ def xkcd_incremental_dag():
 
     # Define task dependencies
     start >> comic_nums >> comic_data_list >> load_results >> summary >> end
+    summary >> trigger_dbt_transformation()
 
 # Create DAG instance
 dag = xkcd_incremental_dag()

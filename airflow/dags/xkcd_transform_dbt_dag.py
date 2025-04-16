@@ -1,11 +1,20 @@
+from datetime import datetime, timedelta
+import subprocess
+import logging
+
 from airflow.decorators import dag, task
 from airflow.models.param import Param
-from airflow.hooks.base import BaseHook
-from datetime import datetime, timedelta
-import os
-import subprocess
-import json
-import logging
+from airflow.utils.trigger_rule import TriggerRule
+
+from xkcd.config import (
+    TASK_RETRY_DELAY,
+    DEFAULT_LOG_LEVEL,
+    DBT_PROJECT_DIR,
+    DEFAULT_MODEL_NAME,
+)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(DEFAULT_LOG_LEVEL)
 
 # Default configuration
 default_args = {
@@ -17,13 +26,8 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-
-DBT_PROJECT_DIR = '/opt/airflow/dbt/xkcd_analytics'
-DEFAULT_MODEL_NAME = 'dim_comics+'  # Default: Run dim_comics and all downstream models
-
-
 @dag(
-    dag_id='dbt_xkcd_transformation',
+    dag_id='dbt_models_run_and_test',
     default_args=default_args,
     description='Execute DBT transformations for XKCD data pipeline',
     schedule_interval=None,  # This DAG is only triggered by the ingestion DAG
@@ -45,35 +49,15 @@ DEFAULT_MODEL_NAME = 'dim_comics+'  # Default: Run dim_comics and all downstream
 )
 def dbt_xkcd_transformation():
     """
-    DAG for running DBT transformations on XKCD data.
+    DAG for running DBT transformations on XKCD comic data.
 
-    This DAG performs a sequence of operations:
-    1. Validates that specified models exist
-    2. Runs the DBT models
-    3. Tests the models to ensure data quality
-    4. Logs execution results
-
-    It can be triggered manually or by the data ingestion process.
+    This DAG is designed to be triggered after new data is ingested.
+    It runs DBT models with the specified selector pattern and
+    ensures that data flows correctly through the transformation layers.
     """
 
-    @task(task_id='validate_dbt_models')
-    def validate_dbt_models(model_name: str) -> bool:
-        """Validate that the specified DBT models exist in the project."""
-        logging.info(f"Validating DBT models: {model_name}")
-
-        result = subprocess.run(
-            f"cd {DBT_PROJECT_DIR} && dbt ls --models {model_name} --output json",
-            shell=True, capture_output=True, text=True
-        )
-        # Check if command executed successfully
-        if result.returncode != 0:
-            logging.error(f"Error listing models: {result.stderr}")
-            raise ValueError(f"Failed to list models: {result.stderr}")
-
-        return True
-
-    @task(task_id='run_dbt_models')
-    def run_dbt_models(model_name: str, full_refresh: bool) -> dict:
+    @task
+    def run_dbt_models(model_name: str, full_refresh: bool) -> bool:
         """
         Run the specified DBT models.
 
@@ -101,15 +85,10 @@ def dbt_xkcd_transformation():
 
         logging.info("DBT run completed successfully")
 
-        # Return result information
-        return {
-            "command": cmd,
-            "stdout": result.stdout,
-            "success": True
-        }
+        return True
 
-    @task(task_id='test_dbt_models')
-    def test_dbt_models(model_name: str) -> dict:
+    @task
+    def test_dbt_models(model_name: str) -> bool:
         """
         Test the specified DBT models to ensure data quality.
 
@@ -131,36 +110,24 @@ def dbt_xkcd_transformation():
 
         logging.info("DBT tests completed successfully")
 
-        return {
-            "success": True,
-            "stdout": result.stdout
-        }
+        return True
 
-    @task(task_id='log_execution_results')
-    def log_execution_results(run_result: dict, test_result: dict) -> None:
-        """
-        Log execution results for monitoring and auditing.
-
-        Args:
-            run_result: Results from the DBT run step
-            test_result: Results from the DBT test step
-        """
+    @task(trigger_rule=TriggerRule.ALL_DONE)
+    def log_execution_results() -> None:
+        """Log execution results for monitoring and auditing."""
         logging.info(f"DBT transformation pipeline completed successfully")
-        logging.info(f"Run command: {run_result['command']}")
-        logging.info(f"Tests completed: {test_result['success']}")
 
     # Get parameters from context
     model_name = "{{ params.model_name }}"
     full_refresh = "{{ params.full_refresh }}"
 
     # Build task flow
-    validation = validate_dbt_models(model_name)
     run_result = run_dbt_models(model_name, full_refresh)
     test_result = test_dbt_models(model_name)
-    execution_log = log_execution_results(run_result, test_result)
+    execution_log = log_execution_results()
 
     # Set dependencies
-    validation >> run_result >> test_result >> execution_log
+    run_result >> test_result >> execution_log
 
 
 # Instantiate the DAG

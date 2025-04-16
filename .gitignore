@@ -1,3 +1,2 @@
 airflow/logs/
-dbt/target/
 .idea/

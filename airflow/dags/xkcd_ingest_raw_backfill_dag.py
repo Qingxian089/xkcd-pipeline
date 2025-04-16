@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Set
 import logging
 from airflow.decorators import dag, task
 from airflow.utils.trigger_rule import TriggerRule
+from airflow.api.common.trigger_dag import trigger_dag
 from airflow.operators.empty import EmptyOperator
 
 from xkcd.hooks.xkcd_api_hook import XKCDApiHook
@@ -68,43 +69,54 @@ def xkcd_backfill_dag():
             raise
 
     @task
-    def process_batch(batch: List[int]) -> List[bool]:
+    def process_batch(batch: List[int]) -> Dict[int, bool]:
         """
-        Process a batch of comics
+        Process a batch of comics with optimized database operations.
 
         Args:
             batch: List of comic numbers to process
         Returns:
-            List of success/failure flags
+            Dictionary mapping comic numbers to processing success status
         """
         api_hook = XKCDApiHook()
         pg_hook = XKCDPostgresHook()
         parser = ComicParser()
-        results = []
 
-        logger.info(f"Processing batch: {batch[0]} - {batch[-1]}")
+        # List to collect comic data for batch insertion
+        comics_data = []
+
+
+        batch_range = f"Batch {batch[0]}-{batch[-1]}"
+        logger.info(f"{batch_range}: Starting processing of {len(batch)} comics")
+        # Fetch comic data individually (maintaining existing rate limiting)
         for comic_num in batch:
             try:
-                # Fetch comic data
+                # API call already includes rate limit delay
                 raw_data = api_hook.get_comic_by_num(comic_num)
                 if not raw_data:
-                    results.append(False)
+                    logger.warning(f"{batch_range}: No data returned for comic #{comic_num}")
                     continue
 
                 # Parse comic data
                 comic_data = parser.parse_comic_data(raw_data)
-                if not comic_data:
-                    results.append(False)
-                    continue
-
-                # Save to database
-                success = pg_hook.insert_single_comic(comic_data)
-                results.append(success)
+                if comic_data:
+                    comics_data.append(comic_data)
+                else:
+                    logger.warning(f"{batch_range}: Failed to parse data for comic #{comic_num}")
 
             except Exception as e:
-                logger.error(f"Error processing comic #{comic_num}: {str(e)}")
-                results.append(False)
-        logger.info(f"Batch {batch[0]} - {batch[-1]} processed with {sum(results)} successes")
+                logger.error(f"{batch_range}: Error processing comic #{comic_num}: {str(e)}")
+
+        # Use batch insertion for collected comics
+        if comics_data:
+            # Insert all comics in a single database operation
+            results = pg_hook.insert_comics_batch(comics_data)
+            success_count = sum(1 for success in results.values() if success)
+            logger.info(f"{batch_range}: Completed with {success_count}/{len(batch)} successes")
+        else:
+            logger.warning(f"{batch_range}: No valid comics to insert")
+            results = {num: False for num in batch}
+
         return results
 
     @task(trigger_rule=TriggerRule.ALL_DONE)
@@ -114,6 +126,15 @@ def xkcd_backfill_dag():
         max_num = pg_hook.get_max_comic_num()
         logger.info(
             f"Ingestion completed. Latest comic in database: #{max_num}"
+        )
+
+    @task(trigger_rule=TriggerRule.ALL_SUCCESS)
+    def trigger_dbt_transformation() -> None:
+        """Trigger DBT transformation DAG"""
+        logger.info("Triggering DBT transformation DAG")
+        trigger_dag(
+            dag_id='dbt_models_run_and_test',
+            run_id=None
         )
 
     # Create start and end markers
@@ -134,6 +155,7 @@ def xkcd_backfill_dag():
     # Define task dependencies
     start >> batches
     batches >> batch_results >> summary >> end
+    summary >> trigger_dbt_transformation()
 
 # Create DAG instance
 dag = xkcd_backfill_dag()

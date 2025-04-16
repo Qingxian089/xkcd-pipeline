@@ -13,7 +13,7 @@ x-airflow-common: &airflow-common
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/plugins:/opt/airflow/plugins
     - ./airflow/logs:/opt/airflow/logs
-    - ./dbt:/opt/airflow/dbt
+    - ./dbt/xkcd_analytics:/opt/airflow/dbt/xkcd_analytics
   user: "${AIRFLOW_UID}:0"
   networks:
     - airflow-network

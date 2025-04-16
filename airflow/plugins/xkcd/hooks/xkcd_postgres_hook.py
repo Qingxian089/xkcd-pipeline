@@ -103,4 +103,37 @@ class XKCDPostgresHook(PostgresHook):
             logger.error(f"Failed to insert comic #{comic_data.num}: {str(e)}")
             return False
 
-# todo: Add batch insert method
+    def insert_batch_comics(self, comics_data: List[ComicData]) -> Dict[int, bool]:
+        """
+        Insert multiple comics in a single batch operation.
+
+        Args:
+            comics_data: List of ComicData objects to insert
+        Returns:
+            Dictionary mapping comic numbers to insertion success status
+        """
+        if not comics_data:
+            return {}
+
+        insert_query = self.parser.generate_insert_query()
+        values = [tuple(self.parser.to_db_record(comic).values()) for comic in comics_data]
+
+        # Initialize results dictionary (comic_num -> success status)
+        results = {comic.num: False for comic in comics_data}
+        try:
+            with self.get_cursor() as cursor:
+                # Use executemany for batch insertion
+                cursor.executemany(insert_query, values)
+                # If we get here, all inserts were successful
+                for comic in comics_data:
+                    results[comic.num] = True
+
+                comic_nums = [comic.num for comic in comics_data]
+                logger.info(
+                    f"Successfully batch inserted {len(comics_data)} comics: {min(comic_nums)}-{max(comic_nums)}")
+
+        except Exception as e:
+            logger.error(f"Batch insertion failed: {str(e)}")
+            # We keep the default False values in results dictionary
+
+        return results
