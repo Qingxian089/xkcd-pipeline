@@ -82,7 +82,8 @@ class XKCDPostgresHook(PostgresHook):
             logger.error(f"Failed to get max comic number: {str(e)}")
             raise
 
-    def insert_single_comic(self, comic_data: ComicData) -> bool:
+
+    def insert_single_comic(self, comic_data: Dict[str, Any]) -> bool:
         """
         Insert a single comic into database
 
@@ -92,18 +93,18 @@ class XKCDPostgresHook(PostgresHook):
             True if insertion successful, False otherwise
         """
         insert_query = self.parser.generate_insert_query()
-        values = tuple(self.parser.to_db_record(comic_data).values())
+        values = tuple(comic_data.values())
 
         try:
             with self.get_cursor() as cursor:
                 cursor.execute(insert_query, values)
-                logger.info(f"Successfully inserted comic #{comic_data.num}")
+                logger.info(f"Successfully inserted comic #{comic_data.get('num')}")
                 return True
         except Exception as e:
-            logger.error(f"Failed to insert comic #{comic_data.num}: {str(e)}")
+            logger.error(f"Failed to insert comic #{comic_data.get('num')}: {str(e)}")
             return False
 
-    def insert_batch_comics(self, comics_data: List[ComicData]) -> Dict[int, bool]:
+    def insert_batch_comics(self, comics_data: List[Dict[str, Any]]) -> bool:
         """
         Insert multiple comics in a single batch operation.
 
@@ -113,27 +114,22 @@ class XKCDPostgresHook(PostgresHook):
             Dictionary mapping comic numbers to insertion success status
         """
         if not comics_data:
-            return {}
+            logger.warning("Empty batch provided, no action taken")
+            return False
 
         insert_query = self.parser.generate_insert_query()
-        values = [tuple(self.parser.to_db_record(comic).values()) for comic in comics_data]
+        values = [tuple(comic.values()) for comic in comics_data]
 
-        # Initialize results dictionary (comic_num -> success status)
-        results = {comic.num: False for comic in comics_data}
         try:
             with self.get_cursor() as cursor:
                 # Use executemany for batch insertion
                 cursor.executemany(insert_query, values)
                 # If we get here, all inserts were successful
-                for comic in comics_data:
-                    results[comic.num] = True
-
-                comic_nums = [comic.num for comic in comics_data]
+                comic_nums = [comic.get('num') for comic in comics_data]
                 logger.info(
                     f"Successfully batch inserted {len(comics_data)} comics: {min(comic_nums)}-{max(comic_nums)}")
+                return True
 
         except Exception as e:
             logger.error(f"Batch insertion failed: {str(e)}")
-            # We keep the default False values in results dictionary
-
-        return results
+            return False

@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 import logging
 from airflow.decorators import dag, task
 from airflow.utils.trigger_rule import TriggerRule
-from airflow.api.common.trigger_dag import trigger_dag
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.exceptions import AirflowSkipException
 
@@ -11,7 +11,6 @@ from xkcd.hooks.xkcd_api_hook import XKCDApiHook
 from xkcd.hooks.xkcd_postgres_hook import XKCDPostgresHook
 from xkcd.utils.comic_parser import ComicParser, ComicData
 from xkcd.config import (
-    TASK_RETRY_DELAY,
     MAX_ACTIVE_RUNS,
     POLLING_INTERVAL_MINUTES,
     MAX_POLLING_RETRIES,
@@ -36,7 +35,7 @@ default_args = {
     dag_id='xkcd_incremental_update',
     default_args=default_args,
     description='Incrementally fetch and load new XKCD comics',
-    schedule_interval='0 10 * * 1,3,5',  # Run at 8 AM on Monday, Wednesday, Friday
+    schedule_interval='0 8 * * 1,3,5',  # Run at 8 AM on Monday, Wednesday, Friday
     catchup=False,
     max_active_runs=MAX_ACTIVE_RUNS,
     tags=['xkcd', 'incremental', 'ingestion'],
@@ -66,10 +65,10 @@ def xkcd_incremental_dag():
             if latest_api_num <= latest_db_num:
                 logger.info("No new comics found, will retry in 60 minutes")
                 # This will trigger a retry if retries remaining, otherwise task will fail
-                raise AirflowSkipException("No new comics found")
+                raise Exception("No new comics found")
 
             new_comics = list(range(latest_db_num + 1, latest_api_num + 1))
-            logger.info(f"Found {len(new_comics)} new comics to fetch")
+            logger.info(f"Found {len(new_comics)} new comic(s) to fetch")
             return new_comics
 
         except Exception as e:
@@ -78,7 +77,7 @@ def xkcd_incremental_dag():
             raise
 
     @task
-    def fetch_comic(comic_num: int) -> Optional[ComicData]:
+    def fetch_comic(comic_num: int) -> Optional[Dict[str, Any]]:
         """Fetch single comic data"""
         api_hook = XKCDApiHook()
         parser = ComicParser()
@@ -92,14 +91,15 @@ def xkcd_incremental_dag():
             if not comic_data:
                 return None
 
-            return comic_data
+            return parser.to_db_record(comic_data)
+
 
         except Exception as e:
             logger.error(f"Error fetching comic {comic_num}: {str(e)}")
             raise
 
     @task
-    def load_comic(comic_data: Optional[ComicData]) -> bool:
+    def load_comic(comic_data: Optional[Dict[str, Any]]) -> bool:
         """Save comic data to database"""
         if not comic_data:
             return False
@@ -109,43 +109,50 @@ def xkcd_incremental_dag():
         try:
             return pg_hook.insert_single_comic(comic_data)
         except Exception as e:
-            logger.error(f"Error loading comic {comic_data.num}: {str(e)}")
+            logger.error(f"Error loading comic {comic_data.get('num')}: {str(e)}")
             raise
 
+
     @task(trigger_rule=TriggerRule.ALL_DONE)
-    def summarize_results() -> None:
-        """Simple summary of ingestion results"""
+    def summarize_results(results=None) -> None:
+        """Summarize ingestion results"""
         pg_hook = XKCDPostgresHook()
         max_num = pg_hook.get_max_comic_num()
-        logger.info(
-            f"Ingestion completed. Latest comic in database: #{max_num}"
-        )
 
-    # Create start and end markers
-    start = EmptyOperator(task_id='start')
-    end = EmptyOperator(
-        task_id='end',
-        trigger_rule=TriggerRule.ALL_DONE  # Ensure this runs regardless of upstream states
-    )
+        # Calculate successful insertions
+        if results:
+            successful_insertions = sum(1 for result in results if result)
+            total_comics = len(results)
+            logger.info(
+                f"Ingestion completed. {successful_insertions}/{total_comics} comics successfully processed. "
+                f"Latest comic in database: #{max_num}"
+            )
+        else:
+            logger.info(f"Ingestion completed. No comics processed. "
+                        f"Latest comic in database: #{max_num}")
 
-    @task(trigger_rule=TriggerRule.ALL_SUCCESS)
-    def trigger_dbt_transformation() -> None:
-        # Trigger DBT DAG
-        logger.info("Triggering DBT transformation DAG")
-        trigger_dag(
-            dag_id='dbt_models_run_and_test',
-            run_id=None
-        )
 
     # Build task flow
+    start = EmptyOperator(task_id="start")
+    end = EmptyOperator(task_id="end", trigger_rule=TriggerRule.ALL_DONE)
+
     comic_nums = get_comic_numbers_to_process()
     comic_data_list = fetch_comic.expand(comic_num=comic_nums)
     load_results = load_comic.expand(comic_data=comic_data_list)
-    summary = summarize_results()
+    summary = summarize_results(load_results)
+
+    # Trigger DBT transformation DAG after ingestion
+    trigger_dbt = TriggerDagRunOperator(
+        task_id="trigger_dbt_transformation",
+        trigger_dag_id="dbt_models_run_and_test",
+        wait_for_completion=False,  # do not wait for completion
+        deferrable=False  # do not use deferrable operator
+    )
 
     # Define task dependencies
-    start >> comic_nums >> comic_data_list >> load_results >> summary >> end
-    summary >> trigger_dbt_transformation()
+    start >> comic_nums >> comic_data_list >> load_results >> summary
+    summary >> trigger_dbt
+    summary >> end
 
 # Create DAG instance
 dag = xkcd_incremental_dag()

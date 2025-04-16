@@ -1,0 +1,7 @@
+requests==2.31.0           # for fetching data from APIs
+psycopg2-binary==2.9.9     # for Airflow PostgreSQL connection
+dbt-postgres==1.7.13        # dbt PostgreSQL adapter
+dbt-postgres[docs]==1.7.13  # dbt PostgreSQL adapter with documentation support
+apache-airflow-providers-postgres==5.13.0  # Airflow PostgreSQL provider
+tenacity==8.2.3             # for retrying failed API requests
+protobuf==4.25.3            # latest stable 5.x version

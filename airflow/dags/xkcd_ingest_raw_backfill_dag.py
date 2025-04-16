@@ -3,13 +3,14 @@ from typing import List, Optional, Dict, Set
 import logging
 from airflow.decorators import dag, task
 from airflow.utils.trigger_rule import TriggerRule
-from airflow.api.common.trigger_dag import trigger_dag
+from airflow.operators.dagrun_operator import TriggerDagRunOperator
 from airflow.operators.empty import EmptyOperator
 
 from xkcd.hooks.xkcd_api_hook import XKCDApiHook
 from xkcd.hooks.xkcd_postgres_hook import XKCDPostgresHook
 from xkcd.utils.comic_parser import ComicParser, ComicData
 from xkcd.config import (
+    MAX_ACTIVE_RUNS,
     DEFAULT_BATCH_SIZE,
     DEFAULT_LOG_LEVEL
 )
@@ -19,7 +20,7 @@ logger.setLevel(DEFAULT_LOG_LEVEL)
 
 default_args = {
     'owner': 'Qingxian',
-    'depends_on_past': True,  # Ensure sequential processing
+    'depends_on_past': True,
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 3,
@@ -32,9 +33,9 @@ default_args = {
     default_args=default_args,
     description='Backfill historical XKCD comics',
     schedule_interval=None,  # Manual trigger only
-    start_date=datetime(2025, 4, 14),
+    start_date=datetime(2025, 4, 1),
     catchup=False,
-    max_active_runs=1,  # Ensure only one backfill runs at a time
+    max_active_runs=MAX_ACTIVE_RUNS,  # Ensure only one backfill runs at a time
     tags=['xkcd', 'backfill'],
 )
 def xkcd_backfill_dag():
@@ -69,7 +70,7 @@ def xkcd_backfill_dag():
             raise
 
     @task
-    def process_batch(batch: List[int]) -> Dict[int, bool]:
+    def process_batch(batch: List[int]) -> bool:
         """
         Process a batch of comics with optimized database operations.
 
@@ -85,10 +86,9 @@ def xkcd_backfill_dag():
         # List to collect comic data for batch insertion
         comics_data = []
 
-
         batch_range = f"Batch {batch[0]}-{batch[-1]}"
-        logger.info(f"{batch_range}: Starting processing of {len(batch)} comics")
-        # Fetch comic data individually (maintaining existing rate limiting)
+        logger.info(f"{batch_range}: Starting fetching of of {len(batch)} comics")
+        # Fetch comic data individually
         for comic_num in batch:
             try:
                 # API call already includes rate limit delay
@@ -100,62 +100,65 @@ def xkcd_backfill_dag():
                 # Parse comic data
                 comic_data = parser.parse_comic_data(raw_data)
                 if comic_data:
-                    comics_data.append(comic_data)
+                    comics_data.append(parser.to_db_record(comic_data))
                 else:
                     logger.warning(f"{batch_range}: Failed to parse data for comic #{comic_num}")
 
             except Exception as e:
                 logger.error(f"{batch_range}: Error processing comic #{comic_num}: {str(e)}")
+        logger.info(f"{batch_range}: Completed fetching comics.")
 
         # Use batch insertion for collected comics
         if comics_data:
+            logger.info(f"{batch_range}: Starting database insertion.")
             # Insert all comics in a single database operation
-            results = pg_hook.insert_comics_batch(comics_data)
-            success_count = sum(1 for success in results.values() if success)
-            logger.info(f"{batch_range}: Completed with {success_count}/{len(batch)} successes")
+            success = pg_hook.insert_batch_comics(comics_data)
+            if success:
+                logger.info(f"{batch_range}: Batch insertion successful")
+            else:
+                logger.error(f"{batch_range}: Batch insertion failed")
+            return success
         else:
             logger.warning(f"{batch_range}: No valid comics to insert")
-            results = {num: False for num in batch}
-
-        return results
+            return False
 
     @task(trigger_rule=TriggerRule.ALL_DONE)
-    def summarize_results() -> None:
-        """Simple summary of ingestion results"""
+    def summarize_results(batch_results=None) -> None:
+        """Summarize ingestion results"""
         pg_hook = XKCDPostgresHook()
         max_num = pg_hook.get_max_comic_num()
-        logger.info(
-            f"Ingestion completed. Latest comic in database: #{max_num}"
-        )
 
-    @task(trigger_rule=TriggerRule.ALL_SUCCESS)
-    def trigger_dbt_transformation() -> None:
-        """Trigger DBT transformation DAG"""
-        logger.info("Triggering DBT transformation DAG")
-        trigger_dag(
-            dag_id='dbt_models_run_and_test',
-            run_id=None
-        )
-
-    # Create start and end markers
-    start = EmptyOperator(task_id='start')
-    end = EmptyOperator(
-        task_id='end',
-        trigger_rule=TriggerRule.ALL_DONE
-    )
+        if batch_results:
+            successful_batches = sum(1 for result in batch_results if result)
+            total_batches = len(batch_results)
+            logger.info(
+                f"Ingestion completed. {successful_batches}/{total_batches} batches successfully processed. "
+                f"Latest comic in database: #{max_num}"
+            )
+        else:
+            logger.info(f"Ingestion completed. No batches processed. "
+                        f"Latest comic in database: #{max_num}")
 
     # Build task flow
-    batches = get_comic_numbers_to_process()
-    # Process each batch
-    batch_results = process_batch.expand(batch=batches)
+    start = EmptyOperator(task_id="start")
+    end = EmptyOperator(task_id="end", trigger_rule=TriggerRule.ALL_DONE)
 
-    # Create single summary task
-    summary = summarize_results()
+    batches = get_comic_numbers_to_process()
+    batch_results = process_batch.expand(batch=batches)
+    summary = summarize_results(batch_results)
+
+    # Trigger DBT transformation DAG after ingestion
+    trigger_dbt = TriggerDagRunOperator(
+        task_id="trigger_dbt_transformation",
+        trigger_dag_id="dbt_models_run_and_test",
+        wait_for_completion=False,  # do not wait for completion
+        deferrable=False  # do not use deferrable operator
+    )
 
     # Define task dependencies
-    start >> batches
-    batches >> batch_results >> summary >> end
-    summary >> trigger_dbt_transformation()
+    start >> batches >> batch_results >> summary
+    summary >> trigger_dbt
+    summary >> end
 
 # Create DAG instance
 dag = xkcd_backfill_dag()

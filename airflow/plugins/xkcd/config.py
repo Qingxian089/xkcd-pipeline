@@ -15,7 +15,7 @@ DEFAULT_RETRY_MAX_DELAY: Final[int] = 10  # seconds
 DEFAULT_RETRY_MULTIPLIER: Final[int] = 2
 
 # Batch Processing
-DEFAULT_BATCH_SIZE: Final[int] = 50
+DEFAULT_BATCH_SIZE: Final[int] = 80
 
 # Database Configuration
 DEFAULT_POSTGRES_CONN_ID: Final[str] = "xkcd_postgres"
@@ -30,11 +30,10 @@ HTTP_OK: Final[int] = 200
 HTTP_NOT_FOUND: Final[int] = 404
 
 # Task Configuration
-TASK_RETRY_DELAY: Final[int] = 5  # minutes
 MAX_ACTIVE_RUNS: Final[int] = 1
 POLLING_INTERVAL_MINUTES: Final[int] = 60  # minutes
 MAX_POLLING_RETRIES: Final[int] = 16  # 8:00 - 24:00
 
 # DBT Configuration
 DBT_PROJECT_DIR: Final[str] = "/opt/airflow/dbt/xkcd_analytics"
-DEFAULT_MODEL_NAME: Final[str] = "dim_comics+"  # Default: Run dim_comics and all downstream models
+DEFAULT_MODEL_NAME: Final[str] = "stg_xkcd_comics+"  # Default: Run dim_comics and all downstream models
