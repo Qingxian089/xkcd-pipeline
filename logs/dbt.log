@@ -1,0 +1,14 @@
+[0m03:53:01.456002 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x107fe5660>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x1095d8910>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x1095d8d30>]}
+
+
+============================== 03:53:01.459094 | b4d1afe4-7b65-49d0-a774-ac83555eff9f ==============================
+[0m03:53:01.459094 [info ] [MainThread]: Running with dbt=1.5.3
+[0m03:53:01.459479 [debug] [MainThread]: running dbt with arguments {'printer_width': '80', 'indirect_selection': 'eager', 'write_json': 'True', 'log_cache_events': 'False', 'partial_parse': 'True', 'cache_selected_only': 'False', 'profiles_dir': '/Users/qingxianlu/.dbt', 'debug': 'False', 'version_check': 'True', 'log_path': 'logs', 'warn_error': 'None', 'fail_fast': 'False', 'use_colors': 'True', 'use_experimental_parser': 'False', 'no_print': 'None', 'quiet': 'False', 'log_format': 'default', 'static_parser': 'True', 'warn_error_options': 'WarnErrorOptions(include=[], exclude=[])', 'introspect': 'True', 'target_path': 'None', 'send_anonymous_usage_stats': 'True'}
+[0m03:53:01.459812 [error] [MainThread]: Encountered an error:
+Runtime Error
+  No dbt_project.yml found at expected path /Users/qingxianlu/Documents/WorkStation/xkcd-pipeline/dbt_project.yml
+  Verify that each entry within packages.yml (and their transitive dependencies) contains a file named dbt_project.yml
+  
+[0m03:53:01.460198 [debug] [MainThread]: Command `dbt docs serve` failed at 03:53:01.460129 after 0.03 seconds
+[0m03:53:01.460387 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x107fe5660>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x109593e80>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x109593460>]}
+[0m03:53:01.460565 [debug] [MainThread]: Flushing usage events

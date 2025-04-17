@@ -4,11 +4,11 @@ A robust data pipeline for extracting, loading, and transforming [XKCD](https://
 
 ## Project Overview
 
-This data pipeline extracts comic data from the [XKCD API](https://xkcd.com/json.html), load it into Postgres database, and processes it through a series of transformations, producing analytics-ready datasets for business analysis. 
+This data pipeline extracts comic data from the [XKCD API](https://xkcd.com/json.html), load it into Postgres database, and processes it through a series of transformations, producing analytics-ready datasets for business intelligence. 
 
 ## Architecture
 
-[Data Pipeline Architecture](https://placeholder-for-pipeline-diagram.png)
+![image](./img/img.png)
 
 
 ## Key Components
@@ -132,8 +132,8 @@ def get_comic_numbers_to_process()
 
 The pipeline includes comprehensive data quality checks:
 
-- **Source validation**: Ensures API responses conform to the expected schema
-- **dbt tests**: Validates data ....................................................
+- **Source validation**:
+- **dbt tests**: 
 
 ## Setup and Installation
 
@@ -146,7 +146,7 @@ The pipeline includes comprehensive data quality checks:
 1. Clone the repository:
    ```
    git clone https://github.com/Qingxian089/xkcd-pipeline.git
-   cd xkcd-data-pipeline
+   cd xkcd-pipeline
    ```
 
 ## Usage
@@ -170,37 +170,13 @@ The pipeline includes comprehensive data quality checks:
 
 3. Switch on all DAGs
 
-4. Test
-
-```
-# exec xkcd database and check if table created
-docker-compose exec postgres psql -U xkcd_user -d xkcd_db
-# list all schemas
-xkcd_db=# \dn
-# check raw table
-xkcd_db=# SELECT * FROM xkcd.raw_xkcd_comics
-# exit database
-\q
-```
-
-
-
-```
-# check curr max
-SELECT MAX(num) FROM raw_xkcd_comics; # should be 3076
-
-# exec xkcd database and delete latest
-DELETE FROM DELETE
-FROM raw_xkcd_comics
-WHERE num > (SELECT MAX(num) - 1 FROM raw_xkcd_comics);
-
-# check curr max after delete
-SELECT MAX(num) FROM raw_xkcd_comics; # should be 3075
-```
 
 ## Future Enhancements
 
-- 
+- Alembic migration 
+- Cloud Deployment 
+- Extra data quality checks (e.g. great expectations)
+- fct_comic_metrics is using randomly generated metrics, which should be replaced with real data
 
 
 ## Acknowledgements

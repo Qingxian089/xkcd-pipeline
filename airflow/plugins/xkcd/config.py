@@ -36,4 +36,4 @@ MAX_POLLING_RETRIES: Final[int] = 16  # 8:00 - 24:00
 
 # DBT Configuration
 DBT_PROJECT_DIR: Final[str] = "/opt/airflow/dbt/xkcd_analytics"
-DEFAULT_MODEL_NAME: Final[str] = "stg_xkcd_comics+"  # Default: Run dim_comics and all downstream models
+DEFAULT_MODEL_NAME: Final[str] = "stg_xkcd_comics+"  # Default: Run stg_xkcd_comics and all downstream models
