@@ -1,2 +1,3 @@
 airflow/logs/
 .idea/
+/logs

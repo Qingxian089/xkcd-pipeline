@@ -99,7 +99,7 @@ The transformation layer uses dbt to create:
 
 #### 3.2. DBT model dependencies
 
-[DBT model dependencies](https://placeholder-for-pipeline-diagram.png)
+![image](./img/img_1.png)
 
 
 ### 4. Airflow DAGs
@@ -112,7 +112,7 @@ Three DAGs orchestrate the entire pipeline:
 
 #### 4.1. DAG dependencies
 
-[DAG dependencies](https://placeholder-for-pipeline-diagram.png)
+![image](./img/img_2.png)
 
 #### 4.2. Polling Logic
 
